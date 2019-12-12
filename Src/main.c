@@ -440,7 +440,7 @@ static void MX_TIM22_Init(void)
   }
 	
 	TIM22->PSC = 32 - 1; 
-	TIM22->ARR = 100000 ; 
+	TIM22->ARR = 10000 ; 
 	TIM22->DIER |= TIM_DIER_UIE; 
 	//TIM22->CR1 |= TIM_CR1_OPM;
 	TIM22->CR1 |= TIM_CR1_CEN; 
@@ -561,8 +561,8 @@ uint16_t BCDToInt (uint16_t d)
 
 void MB04(void) //поменяны местами регистры
 {
-	uint16_t rms_f=0;
-	uint16_t max_f=0;
+	float rms_f=0;
+	float max_f=0;
 
 	uint8_t i;
 	
