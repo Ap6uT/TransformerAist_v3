@@ -440,7 +440,7 @@ static void MX_TIM22_Init(void)
   }
 	
 	TIM22->PSC = 32 - 1; 
-	TIM22->ARR = 10000 ; 
+	TIM22->ARR = 65000 ; 
 	TIM22->DIER |= TIM_DIER_UIE; 
 	//TIM22->CR1 |= TIM_CR1_OPM;
 	TIM22->CR1 |= TIM_CR1_CEN; 
