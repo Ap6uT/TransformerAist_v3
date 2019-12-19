@@ -399,7 +399,7 @@ static void MX_TIM2_Init(uint8_t bd)
 	TIM2->DIER |= TIM_DIER_UIE; 
 	TIM2->CR1 |= TIM_CR1_OPM;
 	//TIM14->CR1 |= TIM_CR1_CEN; 
-	NVIC_SetPriority(TIM2_IRQn, 0); 
+	HAL_NVIC_SetPriority(TIM21_IRQn, 0, 1); 
 	NVIC_EnableIRQ(TIM2_IRQn);
 }
 
