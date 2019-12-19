@@ -421,7 +421,7 @@ static void MX_TIM21_Init(void)
 	TIM21->DIER |= TIM_DIER_UIE; 
 	//TIM21->CR1 |= TIM_CR1_OPM;
 	TIM21->CR1 |= TIM_CR1_CEN; 
-	HAL_NVIC_SetPriority(TIM21_IRQn, 0, 0); 
+	HAL_NVIC_SetPriority(TIM21_IRQn, 0, 3); 
 	NVIC_EnableIRQ(TIM21_IRQn);
 }
 
@@ -977,7 +977,7 @@ int main(void)
 		Write_Flash();
 	}
 	
-	NVIC_SetPriority(USART2_IRQn, 0); 
+	HAL_NVIC_SetPriority(USART2_IRQn, 0, 2);
   NVIC_EnableIRQ(USART2_IRQn);
 	__HAL_UART_ENABLE_IT(&huart2, UART_IT_RXNE); 
 	
@@ -1002,9 +1002,8 @@ int main(void)
 		{
 			Flag=0;
 			
-			TIM22->CNT = 0;
-			TIM22->CR1 |= TIM_CR1_CEN; 
-			MB_HZ_NOW=Dooot;
+			
+			//MB_HZ_NOW=Dooot;
 			if(Flag_timer) 
 			{
 				Dooot=0;
@@ -1315,7 +1314,7 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 	
-	HAL_NVIC_SetPriority(EXTI4_15_IRQn, 0, 0);
+	HAL_NVIC_SetPriority(EXTI4_15_IRQn, 0, 2);
   HAL_NVIC_EnableIRQ(EXTI4_15_IRQn);
 	
 	HAL_NVIC_SetPriority(EXTI0_1_IRQn, 0, 0);
@@ -1328,8 +1327,12 @@ static void MX_GPIO_Init(void)
 void EXTI0_1_IRQHandler(void)
 {
 	HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_0);
-	Flag=1;
 	Dooot=TIM22->CNT;
+	MB_HZ_NOW=Dooot;
+	TIM22->CR1 &= (uint16_t)(~((uint16_t)TIM_CR1_CEN));
+	TIM22->CNT = 0;
+	TIM22->CR1 |= TIM_CR1_CEN; 
+	Flag=1;
 }
 
 void EXTI4_15_IRQHandler(void)
@@ -1351,7 +1354,11 @@ void EXTI4_15_IRQHandler(void)
 void TIM22_IRQHandler(void)
 {
 	HAL_TIM_IRQHandler(&htim22);
+	Dooot=0;
+	MB_HZ_NOW=TIM22->CNT;
 	TIM22->CR1 &= (uint16_t)(~((uint16_t)TIM_CR1_CEN));
+	TIM22->CNT = 0;
+	TIM22->CR1 |= TIM_CR1_CEN; 
 	Flag_timer=1;
 
 }
@@ -1724,7 +1731,7 @@ void TIM2_IRQHandler(void)
 	
 
   res_wr_index=0;
-	 HAL_NVIC_SetPriority(USART2_IRQn, 0, 1);
+	 HAL_NVIC_SetPriority(USART2_IRQn, 0, 2);
     HAL_NVIC_EnableIRQ(USART2_IRQn);
 	__HAL_UART_ENABLE_IT(&huart2, UART_IT_RXNE);
 
