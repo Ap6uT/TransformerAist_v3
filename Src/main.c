@@ -399,7 +399,7 @@ static void MX_TIM2_Init(uint8_t bd)
 	TIM2->DIER |= TIM_DIER_UIE; 
 	TIM2->CR1 |= TIM_CR1_OPM;
 	//TIM14->CR1 |= TIM_CR1_CEN; 
-	HAL_NVIC_SetPriority(TIM21_IRQn, 0, 1); 
+	HAL_NVIC_SetPriority(TIM2_IRQn, 0, 1); 
 	NVIC_EnableIRQ(TIM2_IRQn);
 }
 
@@ -1326,13 +1326,16 @@ static void MX_GPIO_Init(void)
 
 void EXTI0_1_IRQHandler(void)
 {
-	HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_0);
-	Dooot=TIM22->CNT;
-	MB_HZ_NOW=Dooot;
-	TIM22->CR1 &= (uint16_t)(~((uint16_t)TIM_CR1_CEN));
-	TIM22->CNT = 0;
-	TIM22->CR1 |= TIM_CR1_CEN; 
-	Flag=1;
+	if((EXTI->PR & EXTI_PR_PR0) == EXTI_PR_PR0)
+	{
+		HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_0);
+		Dooot=TIM22->CNT;
+		MB_HZ_NOW=Dooot;
+		TIM22->CR1 &= (uint16_t)(~((uint16_t)TIM_CR1_CEN));
+		TIM22->CNT = 0;
+		TIM22->CR1 |= TIM_CR1_CEN; 
+		Flag=1;
+	}
 }
 
 void EXTI4_15_IRQHandler(void)
