@@ -52,7 +52,7 @@
 #define attOnPinSet() HAL_GPIO_WritePin(attOnPort,attOnPin,GPIO_PIN_SET)
 #define attOnPinReset() HAL_GPIO_WritePin(attOnPort,attOnPin,GPIO_PIN_RESET)
 
-#define FlAdr (uint32_t)(0x08007F00)
+#define FlAdr (uint32_t)(0x08007D00)
 
 #define AttPause 1
 #define AttPauseAfter 2
@@ -210,7 +210,7 @@ volatile uint8_t Flag_timer=1;
 uint8_t FlagMB=1;
 uint8_t FlagMB2=1;
 
-uint32_t FBI[20];
+uint32_t FBI[3][25];
 uint16_t abcd[8];
 uint32_t FBI0;
 uint32_t FBI1;
@@ -496,7 +496,7 @@ uint32_t check_calc(uint32_t *buffer, uint32_t buff_len) {
 	return result;
 }
 
-void Write_Flash(void)
+void Write_Flash_Adr(uint32_t Adr)
 {
 	uint16_t i=0;
 	uint32_t Buf[20];
@@ -535,9 +535,16 @@ void Write_Flash(void)
 	}
 	for(i=0;i<20;i++)
 	{
-		HAL_FLASH_Program(TYPEPROGRAM_WORD, FlAdr+i*4,Buf[i]);
+		HAL_FLASH_Program(TYPEPROGRAM_WORD, Adr+i*4,Buf[i]);
 	}	
 	HAL_FLASH_Lock();
+}
+
+void Write_Flash(void)
+{
+	Write_Flash_Adr(FlAdr);
+	Write_Flash_Adr(FlAdr+0x100);
+	Write_Flash_Adr(FlAdr+0x200);
 }
 
 uint32_t FLASH_Read(uint32_t address)
@@ -917,72 +924,102 @@ int main(void)
 	MB_ATT_ON=0x0FA0;
 	MB_ATT_OFF=0x00FA;
 	uint8_t j;
-	FBI[0]=FLASH_Read(FlAdr);
+	FBI[0][0]=FLASH_Read(FlAdr);
+	uint8_t k, rightData;
 	
-	if((FBI[0] == 0)||(FBI[0]==0xFFFFFFFF))
+	if((FBI[0][0]==0)||(FBI[0][0]==0xFFFFFFFF))
 	{
+		rightData=4; //wrong data - need write default
 		Write_Flash();
 	}
-	for(j=0;j<19;j++)
+	else
 	{
-		FBI[j]=FLASH_Read(FlAdr+j*4);
+		for(k=0;k<20;k++)
+		{
+			FBI[0][k]=FLASH_Read(FlAdr + k*4);
+			FBI[1][k]=FLASH_Read(FlAdr + 0x100 + k*4);
+			FBI[2][k]=FLASH_Read(FlAdr + 0x200 + k*4);
+		}
+		uint32_t crc32[3];
+		for(k=0;k<3;k++)
+		{
+			crc32[k]=check_calc(FBI[k],19);
+		}
+		if (crc32[0]==FBI[0][19] && crc32[1]==FBI[1][19] && FBI[0][19]==FBI[1][19])
+		{
+			rightData=0;
+		}
+		else if (crc32[0]==FBI[0][19] && crc32[2]==FBI[2][19] && FBI[0][19]==FBI[2][19])
+		{
+			rightData=0;
+		}
+		else if (crc32[1]==FBI[1][19] && crc32[2]==FBI[2][19] && FBI[1][19]==FBI[2][19])
+		{
+			rightData=1;
+		}
+		else
+		{
+			rightData=4; //wrong data - need write default
+			Write_Flash();		
+		}
 	}
-
-
-
-	MB_ADR=FBI[0]>>16;
-	MB_SPEED=FBI[0]&0x0000FFFF;
 	
-	MB_RMS_N_I=FBI[1]>>16;
-	MB_AMPL_N_I=FBI[1]&0x0000FFFF;
-	MB_RMS_O_I=FBI[2]>>16;
-	MB_AMPL_O_I=FBI[2]&0x0000FFFF;
 	
-	MB_RMS_N_I2=FBI[3]>>16;
-	MB_AMPL_N_I2=FBI[3]&0x0000FFFF;
-	MB_RMS_O_I2=FBI[4]>>16;
-	MB_AMPL_O_I2=FBI[4]&0x0000FFFF;
-	
-	MB_RMS_N_I3=FBI[5]>>16;
-	MB_AMPL_N_I3=FBI[5]&0x0000FFFF;
-	MB_RMS_O_I3=FBI[6]>>16;
-	MB_AMPL_O_I3=FBI[6]&0x0000FFFF;
-	
-	MB_HZ_I=FBI[7]>>16;
-	MB_HZ_F=FBI[7]&0x0000FFFF;
-	
-	MB_FLOAT1_N_F=FBI[8]>>16;
-	MB_FLOAT2_N_F=FBI[8]&0x0000FFFF;
-	
-	MB_FLOAT1_O_F=FBI[9]>>16;
-	MB_FLOAT2_O_F=FBI[9]&0x0000FFFF;
-	
-	MB_AMPL_ZERO=FBI[10]>>16;
-	MB_RMS_ZERO=FBI[10]&0x0000FFFF;
-	
-	MB_AMPL_ZERO2=FBI[11]>>16;
-	MB_RMS_ZERO2=FBI[11]&0x0000FFFF;
-	
-	MB_AMPL_ZERO3=FBI[12]>>16;
-	MB_RMS_ZERO3=FBI[12]&0x0000FFFF;
-	
-	MB_NAME=FBI[13]&0x0000FFFF;
-	
-	MB_ATT_OFF=FBI[14]>>16;
-	MB_ATT_ON=FBI[14]&0x0000FFFF;
-	
-	MB_FLOAT1_N_F2=FBI[15]>>16;
-	MB_FLOAT2_N_F2=FBI[15]&0x0000FFFF;
-	
-	MB_FLOAT1_O_F2=FBI[16]>>16;
-	MB_FLOAT2_O_F2=FBI[16]&0x0000FFFF;
-	
-	MB_FLOAT1_N_F3=FBI[17]>>16;
-	MB_FLOAT2_N_F3=FBI[17]&0x0000FFFF;
-	
-	MB_FLOAT1_O_F3=FBI[18]>>16;
-	MB_FLOAT2_O_F3=FBI[18]&0x0000FFFF;
-	
+	if(rightData<3)
+	{
+		MB_ADR=FBI[rightData][0]>>16;
+		MB_SPEED=FBI[rightData][0]&0x0000FFFF;
+		
+		MB_RMS_N_I=FBI[rightData][1]>>16;
+		MB_AMPL_N_I=FBI[rightData][1]&0x0000FFFF;
+		MB_RMS_O_I=FBI[rightData][2]>>16;
+		MB_AMPL_O_I=FBI[rightData][2]&0x0000FFFF;
+		
+		MB_RMS_N_I2=FBI[rightData][3]>>16;
+		MB_AMPL_N_I2=FBI[rightData][3]&0x0000FFFF;
+		MB_RMS_O_I2=FBI[rightData][4]>>16;
+		MB_AMPL_O_I2=FBI[rightData][4]&0x0000FFFF;
+		
+		MB_RMS_N_I3=FBI[rightData][5]>>16;
+		MB_AMPL_N_I3=FBI[rightData][5]&0x0000FFFF;
+		MB_RMS_O_I3=FBI[rightData][6]>>16;
+		MB_AMPL_O_I3=FBI[rightData][6]&0x0000FFFF;
+		
+		MB_HZ_I=FBI[rightData][7]>>16;
+		MB_HZ_F=FBI[rightData][7]&0x0000FFFF;
+		
+		MB_FLOAT1_N_F=FBI[rightData][8]>>16;
+		MB_FLOAT2_N_F=FBI[rightData][8]&0x0000FFFF;
+		
+		MB_FLOAT1_O_F=FBI[rightData][9]>>16;
+		MB_FLOAT2_O_F=FBI[rightData][9]&0x0000FFFF;
+		
+		MB_AMPL_ZERO=FBI[rightData][10]>>16;
+		MB_RMS_ZERO=FBI[rightData][10]&0x0000FFFF;
+		
+		MB_AMPL_ZERO2=FBI[rightData][11]>>16;
+		MB_RMS_ZERO2=FBI[rightData][11]&0x0000FFFF;
+		
+		MB_AMPL_ZERO3=FBI[rightData][12]>>16;
+		MB_RMS_ZERO3=FBI[rightData][12]&0x0000FFFF;
+		
+		MB_NAME=FBI[rightData][13]&0x0000FFFF;
+		
+		MB_ATT_OFF=FBI[rightData][14]>>16;
+		MB_ATT_ON=FBI[rightData][14]&0x0000FFFF;
+		
+		MB_FLOAT1_N_F2=FBI[rightData][15]>>16;
+		MB_FLOAT2_N_F2=FBI[rightData][15]&0x0000FFFF;
+		
+		MB_FLOAT1_O_F2=FBI[rightData][16]>>16;
+		MB_FLOAT2_O_F2=FBI[rightData][16]&0x0000FFFF;
+		
+		MB_FLOAT1_N_F3=FBI[rightData][17]>>16;
+		MB_FLOAT2_N_F3=FBI[rightData][17]&0x0000FFFF;
+		
+		MB_FLOAT1_O_F3=FBI[rightData][18]>>16;
+		MB_FLOAT2_O_F3=FBI[rightData][18]&0x0000FFFF;
+	}
 	if(MB_HZ_I==0)
 	{
 		MB_HZ_I=8001;
@@ -1417,7 +1454,9 @@ void TIM2_IRQHandler(void)
 	HAL_TIM_IRQHandler(&htim2);
 
 	FlagMB=1;
-
+	
+	uint8_t needFlashWrite=0;
+		
 	uint16_t ind,dt;
 	
 	uint8_t snd_cnt=0;
@@ -1542,7 +1581,8 @@ void TIM2_IRQHandler(void)
 							//MX_TIM2_Init(dt);
 						}
 						reg_MB[ind]=dt;	
-						Write_Flash();
+						needFlashWrite=1;
+						//Write_Flash();
 		  		}
 					//zero
 					else if(res_buffer[0]==247&&((res_buffer[2]*0x100+res_buffer[3]>7)&&(res_buffer[2]*0x100+res_buffer[3]<0x0E)))
@@ -1563,7 +1603,8 @@ void TIM2_IRQHandler(void)
 						write_buffer[5]=res_buffer[5];
 						snd_cnt=6;
 					
-						Write_Flash();
+						needFlashWrite=1;
+						//Write_Flash();
 					}
 					
 					else if(res_buffer[0]==247&&((res_buffer[2]*0x100+res_buffer[3]>0x2F)&&(res_buffer[2]*0x100+res_buffer[3]<0x4D)))
@@ -1588,7 +1629,8 @@ void TIM2_IRQHandler(void)
 						write_buffer[5]=res_buffer[5];
 						snd_cnt=6;
 					
-						Write_Flash();
+						needFlashWrite=1;
+						//Write_Flash();
 					}
 					
 					else if(res_buffer[0]==247&&res_buffer[2]==0x00&&res_buffer[3]==0x50&&res_buffer[4]==0x50&&res_buffer[5]==0x50)
@@ -1702,7 +1744,8 @@ void TIM2_IRQHandler(void)
 					reg_MB[res_buffer[3]]=res_buffer[7]*0x100+res_buffer[8];
 					reg_MB[res_buffer[3]+1]=res_buffer[9]*0x100+res_buffer[10];
 					snd_cnt=6;
-					Write_Flash();
+					needFlashWrite=1;
+						//Write_Flash();
 				}
 				else
 				{
@@ -1754,6 +1797,12 @@ void TIM2_IRQHandler(void)
 				NeedChangeSpeed=0;
 				USART2_ReInit(dt);
 				MX_TIM2_Init(dt);
+			}
+			
+			if(needFlashWrite)
+			{
+				needFlashWrite=0;
+				Write_Flash();
 			}
 	  }
 
