@@ -59,6 +59,7 @@
 
 #define Kf 50
 
+#define MBReinitTime 60
 
 const unsigned char auchCRCHi[] =
 {
@@ -128,7 +129,7 @@ UART_HandleTypeDef huart2;
 
 ADC_AnalogWDGConfTypeDef awdgc1;
 
-
+volatile uint8_t mbReinitCnt=0;
 
 uint16_t CRCCod;
 
@@ -140,7 +141,9 @@ uint16_t MBPauseCnt=0;
 
 uint32_t zeros=0;
 
-unsigned char res_buffer[80];					// приемный буфер
+
+#define res_buff_size 80
+unsigned char res_buffer[res_buff_size];					// приемный буфер
 unsigned char write_buffer[300];					// буфер для передачи
 volatile unsigned char res_wr_index;
 
@@ -484,10 +487,19 @@ void Erase_Flash(void)
 	HAL_FLASH_Lock();
 }
 
+uint32_t check_calc(uint32_t *buffer, uint32_t buff_len) {
+	uint32_t result, i;
+	result=0;
+	for(i = 0; i < buff_len; i++) {
+    result ^= buffer[i]; 
+  }
+	return result;
+}
+
 void Write_Flash(void)
 {
 	uint16_t i=0;
-	uint32_t Buf[19];
+	uint32_t Buf[20];
 	uint32_t PgError = 0;
 	Buf[0]=(uint32_t)(MB_ADR*0x10000+MB_SPEED);
 	Buf[1]=(uint32_t)(MB_RMS_N_I*0x10000+MB_AMPL_N_I);
@@ -508,19 +520,20 @@ void Write_Flash(void)
 	Buf[16]=(uint32_t)(MB_FLOAT1_O_F2*0x10000+MB_FLOAT2_O_F2);
 	Buf[17]=(uint32_t)(MB_FLOAT1_N_F3*0x10000+MB_FLOAT2_N_F3);
 	Buf[18]=(uint32_t)(MB_FLOAT1_O_F3*0x10000+MB_FLOAT2_O_F3);
+	Buf[19]=check_calc(Buf,19);
 	
 	HAL_FLASH_Unlock();
 	
 	FLASH_EraseInitTypeDef Flash_eraseInitStruct;
 	Flash_eraseInitStruct.TypeErase     = FLASH_TYPEERASE_PAGES;
 	Flash_eraseInitStruct.PageAddress  = FlAdr;
-	Flash_eraseInitStruct.NbPages        = 2;
+	Flash_eraseInitStruct.NbPages        = 1;
 
 	if(HAL_FLASHEx_Erase(&Flash_eraseInitStruct, &PgError) != HAL_OK)
 	{
 		 HAL_FLASH_Lock();
 	}
-	for(i=0;i<19;i++)
+	for(i=0;i<20;i++)
 	{
 		HAL_FLASH_Program(TYPEPROGRAM_WORD, FlAdr+i*4,Buf[i]);
 	}	
@@ -996,6 +1009,19 @@ int main(void)
   {
 		uint8_t i;
 		HAL_IWDG_Refresh(&hiwdg);
+		
+		if(mbReinitCnt>MBReinitTime)
+		{
+			mbReinitCnt=0;
+			//usart reinit
+			if(MB_SPEED>8){MB_SPEED=2;}
+			USART2_ReInit(MB_SPEED);
+			MX_TIM2_Init(MB_SPEED);
+			HAL_NVIC_SetPriority(USART2_IRQn, 0, 1);
+			HAL_NVIC_EnableIRQ(USART2_IRQn);
+			__HAL_UART_ENABLE_IT(&huart2, UART_IT_RXNE);
+		}
+		
 		My_Jump_Boatloader();
 		
 		if(Flag || Flag_timer/*Dot > 30000*/)
@@ -1375,8 +1401,10 @@ void USART2_IRQHandler(void)
 			TIM2->CNT=0;
 			res_buffer[res_wr_index]=(uint8_t)(USART2->RDR);
 			//HAL_UART_Receive(&huart2, &x, 1, 100);
-			
-			res_wr_index++;						
+			if (res_wr_index<res_buff_size-1)
+			{
+				res_wr_index++;		
+			}
 			FlagMB=1;
 			TIM2->CR1 |= TIM_CR1_CEN; 
 	}
@@ -1397,10 +1425,12 @@ void TIM2_IRQHandler(void)
 	if (res_buffer[0]==MB_ADR||res_buffer[0]==247)
 
   {
-		
+		mbReinitCnt=0;
 	  CRCCod=CRC16(res_buffer, (res_wr_index));	// Расчет СRC
 	  if (CRCCod==0)								// Проверка CRC в посылке
-	  {										
+	  {							
+
+			
 		  switch (res_buffer[1]) {
 		  case 0x03:							// Чтение регистров
 		  {
@@ -1744,6 +1774,8 @@ void TIM21_IRQHandler(void)
 {
 	HAL_TIM_IRQHandler(&htim21);
 
+	mbReinitCnt++;
+	
 	if(FlagA90)
 	{
 		AttP++;
