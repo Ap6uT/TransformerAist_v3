@@ -1429,19 +1429,33 @@ void TIM22_IRQHandler(void)
 
 }
 
+
+
 void USART2_IRQHandler(void)
 {
 	if((USART2->ISR & USART_ISR_RXNE) == USART_ISR_RXNE)
 	{	
 		
-			TIM2->CR1 &= (uint16_t)(~((uint16_t)TIM_CR1_CEN));
-			TIM2->CNT=0;
-			res_buffer[res_wr_index]=(uint8_t)(USART2->RDR);
-			//HAL_UART_Receive(&huart2, &x, 1, 100);
+		TIM2->CR1 &= (uint16_t)(~((uint16_t)TIM_CR1_CEN));
+		TIM2->CNT=0;
+		uint8_t buf = 0;
+		buf =(uint8_t)(USART2->RDR);
+		if(res_wr_index==0)
+		{
+			if (buf==MB_ADR||buf==247)
+			{
+				res_buffer[res_wr_index]=buf;
+				res_wr_index++;	
+			}
+		}
+		else
+		{
+			res_buffer[res_wr_index]=buf;
 			if (res_wr_index<res_buff_size-1)
 			{
-				res_wr_index++;		
-			}
+				res_wr_index++;						
+			}	
+		}
 			FlagMB=1;
 			TIM2->CR1 |= TIM_CR1_CEN; 
 	}
