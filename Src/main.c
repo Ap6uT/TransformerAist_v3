@@ -108,7 +108,8 @@ const unsigned char auchCRCLo[] =
 
 
 const uint32_t USART_const [9] = {2400,4800,9600,14400,19200,38400,56000,57600,115200};
-const uint8_t  TIMER_const [9] = {15,8,4,3,2,2,2,2,2};
+//const uint8_t  TIMER_const [9] = {4,8,4,3,2,2,2,2,2};
+const uint8_t  TIMER_const [9] = {37,73,37,25,19,10,7,7,4};
 
 /* USER CODE END Includes */
 
@@ -140,6 +141,8 @@ uint16_t MBPause=0;
 uint16_t MBPauseCnt=0;
 
 uint32_t zeros=0;
+
+uint8_t MBBusy=0;
 
 
 #define res_buff_size 80
@@ -387,7 +390,7 @@ static void MX_TIM2_Init(uint8_t bd)
 {
 	__HAL_RCC_TIM2_CLK_ENABLE();
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 32000-1;
+  htim2.Init.Prescaler = 3200-1;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim2.Init.Period = TIMER_const[bd];
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -397,11 +400,11 @@ static void MX_TIM2_Init(uint8_t bd)
   }
 	
 	
-	TIM2->PSC = 32000 - 1; 
+	TIM2->PSC = 3200 - 1; 
 	TIM2->ARR = TIMER_const[bd]; 
 	TIM2->DIER |= TIM_DIER_UIE; 
 	TIM2->CR1 |= TIM_CR1_OPM;
-	//TIM14->CR1 |= TIM_CR1_CEN; 
+	
 	HAL_NVIC_SetPriority(TIM2_IRQn, 0, 1); 
 	NVIC_EnableIRQ(TIM2_IRQn);
 }
@@ -542,9 +545,11 @@ void Write_Flash_Adr(uint32_t Adr)
 
 void Write_Flash(void)
 {
+	MBBusy=1;
 	Write_Flash_Adr(FlAdr);
 	Write_Flash_Adr(FlAdr+0x100);
 	Write_Flash_Adr(FlAdr+0x200);
+	MBBusy=0;
 }
 
 uint32_t FLASH_Read(uint32_t address)
@@ -1436,32 +1441,16 @@ void USART2_IRQHandler(void)
 	if((USART2->ISR & USART_ISR_RXNE) == USART_ISR_RXNE)
 	{	
 		
-		TIM2->CR1 &= (uint16_t)(~((uint16_t)TIM_CR1_CEN));
-		TIM2->CNT=0;
-		uint8_t buf = 0;
-		buf =(uint8_t)(USART2->RDR);
-		if(res_wr_index==0)
-		{
-			if (buf==MB_ADR||buf==247)
+			TIM2->CR1 &= (uint16_t)(~((uint16_t)TIM_CR1_CEN));
+			TIM2->CNT=0;
+			res_buffer[res_wr_index]=(uint8_t)(USART2->RDR);
+			//HAL_UART_Receive(&huart2, &x, 1, 100);
+			if(res_wr_index<res_buff_size-1)
 			{
-				res_buffer[res_wr_index]=buf;
-				res_wr_index++;	
-				TIM2->CR1 |= TIM_CR1_CEN; 
-				FlagMB=1;
+				res_wr_index++;			
 			}
-		}
-		else
-		{
-			res_buffer[res_wr_index]=buf;
-			if (res_wr_index<res_buff_size-1)
-			{
-				res_wr_index++;						
-			}	
-			TIM2->CR1 |= TIM_CR1_CEN; 
 			FlagMB=1;
-		}
-			
-			
+			TIM2->CR1 |= TIM_CR1_CEN; 
 	}
 	HAL_UART_IRQHandler(&huart2);
 }
@@ -1487,322 +1476,332 @@ void TIM2_IRQHandler(void)
 	  if (CRCCod==0)								// Проверка CRC в посылке
 	  {							
 
-			
-		  switch (res_buffer[1]) {
-		  case 0x03:							// Чтение регистров
-		  {
-			  if (res_buffer[0]==247&&(res_buffer[2]<1) && ((res_buffer[3]+res_buffer[4]*256+res_buffer[5]-1)<0x4D))
-			  {
-				  write_buffer[0]=res_buffer[0];					// Адрес устройства
-				  write_buffer[1]=0x03;						// Та-же функция
-				  write_buffer[2]=res_buffer[5]*2;			// Счетчик байт
-
-				  for (i=0; i<res_buffer[5]; i++)				// Значения регистров
-				  {
-					  write_buffer[4+(2*i)]=(reg_MB[res_buffer[2]*0x100+res_buffer[3]+i])& 0x00FF;//%256;		// Младший байт (2-ой)
-					  write_buffer[3+(2*i)]=(reg_MB[res_buffer[2]*0x100+res_buffer[3]+i])>> 8;///256;	// Старший байт (1-ый)
-				  }		
-					snd_cnt=write_buffer[2]+3;
-			  }
-				else if ((res_buffer[2]<1) && ((res_buffer[3]+res_buffer[4]*256+res_buffer[5]-0x25)<13  ||
-					(res_buffer[3]+res_buffer[4]*256+res_buffer[5]-0x20)<4 || (res_buffer[3]+res_buffer[4]*256+res_buffer[5]-0x23)<2))
-			  {
-				  write_buffer[0]=res_buffer[0];					// Адрес устройства
-				  write_buffer[1]=0x03;						// Та-же функция
-				  write_buffer[2]=res_buffer[5]*2;			// Счетчик байт
-
-				  for (i=0; i<res_buffer[5]; i++)				// Значения регистров
-				  {
-					  write_buffer[4+(2*i)]=(reg_MB[res_buffer[2]*0x100+res_buffer[3]+i])& 0x00FF;//%256;		// Младший байт (2-ой)
-					  write_buffer[3+(2*i)]=(reg_MB[res_buffer[2]*0x100+res_buffer[3]+i])>> 8;///256;	// Старший байт (1-ый)
-				  }		
-					snd_cnt=write_buffer[2]+3;
-			  }
-			  else
-			  {
-				  write_buffer[0]=res_buffer[0];					// адрес блока
-				  write_buffer[1]=0x83;						// та-же функция + взведенный бит ошибки
-				  write_buffer[2]=0x02;				// код ошибки - недопустимый адрес
-					snd_cnt=3;
-			  }
-			  break;
-		  }
-			case 0x04:							// Чтение регистров
-		  {
-			  if ((res_buffer[2]==1) && ((res_buffer[3]+res_buffer[4]*256+res_buffer[5]-1)<8))
-			  {
-					//ampl=MaxS;
-					MB04();
-
-				  write_buffer[0]=res_buffer[0];					// Адрес устройства
-				  write_buffer[1]=0x04;						// Та-же функция
-				  write_buffer[2]=res_buffer[5]*2;			// Счетчик байт
-
-				  for (i=0; i<res_buffer[5]; i++)				// Значения регистров
-				  {
-					  write_buffer[4+(2*i)]=(reg_MB2[res_buffer[2]*0x100+res_buffer[3]+i-256])%256;		// Младший байт (2-ой)
-					  write_buffer[3+(2*i)]=(reg_MB2[res_buffer[2]*0x100+res_buffer[3]+i-256])/256;	// Старший байт (1-ый)
-				  }
-
-
-					
-					snd_cnt=write_buffer[2]+3;
-			  }
-				else if ((res_buffer[2]==2) && ((res_buffer[3]+res_buffer[4]*256+res_buffer[5]-1)<15))
-			  {
-					//ampl=MaxS;
-					MB04();
-
-				  write_buffer[0]=res_buffer[0];					// Адрес устройства
-				  write_buffer[1]=0x04;						// Та-же функция
-				  write_buffer[2]=res_buffer[5]*2;			// Счетчик байт
-
-				  for (i=0; i<res_buffer[5]; i++)				// Значения регистров
-				  {
-					  write_buffer[4+(2*i)]=(reg_MB3[res_buffer[2]*0x100+res_buffer[3]+i-512])%256;		// Младший байт (2-ой)
-					  write_buffer[3+(2*i)]=(reg_MB3[res_buffer[2]*0x100+res_buffer[3]+i-512])/256;	// Старший байт (1-ый)
-				  }
-					
-					snd_cnt=write_buffer[2]+3;
-
-			  }
-			  else
-			  {
-				  write_buffer[0]=res_buffer[0];					// адрес блока
-				  write_buffer[1]=0x84;						// та-же функция + взведенный бит ошибки
-				  write_buffer[2]=0x02;				// код ошибки - недопустимый адрес
-					snd_cnt=3;
-					
-
-			  }
-			  break;
-		  }
-		  case 0x06:						//запись регистра
-		  {
-		  		if ((res_buffer[2]*0x100+res_buffer[3]>0x20)&&(res_buffer[2]*0x100+res_buffer[3]<0x25))//если возможна запись регистра
-		  		{
-						//uint16_t ind,dt;
-		  			write_buffer[0]=res_buffer[0];					// адрес блока
-		  			write_buffer[1]=0x06;						// та-же функция
-		  			write_buffer[2]=res_buffer[2];				// те же данные
-		  			write_buffer[3]=res_buffer[3];
-		  			write_buffer[4]=res_buffer[4];
-		  			write_buffer[5]=res_buffer[5];
-						snd_cnt=6;
-						ind=res_buffer[2]*0x100+res_buffer[3];
-						dt=res_buffer[4]*0x100+res_buffer[5];					
-						if(ind==0x22)
-						{
-							if(dt>8){dt=8;}
-							NeedChangeSpeed=1;
-							//USART2_ReInit(dt);
-							//MX_TIM2_Init(dt);
-						}
-						reg_MB[ind]=dt;	
-						needFlashWrite=1;
-						//Write_Flash();
-		  		}
-					//zero
-					else if(res_buffer[0]==247&&((res_buffer[2]*0x100+res_buffer[3]>7)&&(res_buffer[2]*0x100+res_buffer[3]<0x0E)))
-					{	
-						MB_AMPL_ZERO=MB_AMPL_NOW&0x0FFF;
-						MB_RMS_ZERO=MB_RMS_NOW&0x0FFF;
-						MB_AMPL_ZERO2=MB_AMPL_NOW2&0x0FFF;
-						MB_RMS_ZERO2=MB_RMS_NOW2&0x0FFF;
-						MB_AMPL_ZERO3=MB_AMPL_NOW3&0x0FFF;
-						MB_RMS_ZERO3=MB_RMS_NOW3&0x0FFF;
-						
-
-						write_buffer[0]=res_buffer[0];					// адрес блока
-						write_buffer[1]=0x06;						// та-же функция
-						write_buffer[2]=res_buffer[2];				// те же данные
-						write_buffer[3]=res_buffer[3];
-						write_buffer[4]=res_buffer[4];
-						write_buffer[5]=res_buffer[5];
-						snd_cnt=6;
-					
-						needFlashWrite=1;
-						//Write_Flash();
-					}
-					
-					else if(res_buffer[0]==247&&((res_buffer[2]*0x100+res_buffer[3]>0x2F)&&(res_buffer[2]*0x100+res_buffer[3]<0x4D)))
+			if (MBBusy==0) 
+			{
+				switch (res_buffer[1]) {
+				case 0x03:							// Чтение регистров
+				{
+					if (res_buffer[0]==247&&(res_buffer[2]<1) && ((res_buffer[3]+res_buffer[4]*256+res_buffer[5]-1)<0x4D))
 					{
+						write_buffer[0]=res_buffer[0];					// Адрес устройства
+						write_buffer[1]=0x03;						// Та-же функция
+						write_buffer[2]=res_buffer[5]*2;			// Счетчик байт
+
+						for (i=0; i<res_buffer[5]; i++)				// Значения регистров
+						{
+							write_buffer[4+(2*i)]=(reg_MB[res_buffer[2]*0x100+res_buffer[3]+i])& 0x00FF;//%256;		// Младший байт (2-ой)
+							write_buffer[3+(2*i)]=(reg_MB[res_buffer[2]*0x100+res_buffer[3]+i])>> 8;///256;	// Старший байт (1-ый)
+						}		
+						snd_cnt=write_buffer[2]+3;
+					}
+					else if ((res_buffer[2]<1) && ((res_buffer[3]+res_buffer[4]*256+res_buffer[5]-0x25)<13  ||
+						(res_buffer[3]+res_buffer[4]*256+res_buffer[5]-0x20)<4 || (res_buffer[3]+res_buffer[4]*256+res_buffer[5]-0x23)<2))
+					{
+						write_buffer[0]=res_buffer[0];					// Адрес устройства
+						write_buffer[1]=0x03;						// Та-же функция
+						write_buffer[2]=res_buffer[5]*2;			// Счетчик байт
+
+						for (i=0; i<res_buffer[5]; i++)				// Значения регистров
+						{
+							write_buffer[4+(2*i)]=(reg_MB[res_buffer[2]*0x100+res_buffer[3]+i])& 0x00FF;//%256;		// Младший байт (2-ой)
+							write_buffer[3+(2*i)]=(reg_MB[res_buffer[2]*0x100+res_buffer[3]+i])>> 8;///256;	// Старший байт (1-ый)
+						}		
+						snd_cnt=write_buffer[2]+3;
+					}
+					else
+					{
+						write_buffer[0]=res_buffer[0];					// адрес блока
+						write_buffer[1]=0x83;						// та-же функция + взведенный бит ошибки
+						write_buffer[2]=0x02;				// код ошибки - недопустимый адрес
+						snd_cnt=3;
+					}
+					break;
+				}
+				case 0x04:							// Чтение регистров
+				{
+					if ((res_buffer[2]==1) && ((res_buffer[3]+res_buffer[4]*256+res_buffer[5]-1)<8))
+					{
+						//ampl=MaxS;
 						MB04();
-						
-						
 
-						reg_MB[res_buffer[3]]=res_buffer[4]*0x100+res_buffer[5];
+						write_buffer[0]=res_buffer[0];					// Адрес устройства
+						write_buffer[1]=0x04;						// Та-же функция
+						write_buffer[2]=res_buffer[5]*2;			// Счетчик байт
 
-
-						if(res_buffer[3]==0x4C)
+						for (i=0; i<res_buffer[5]; i++)				// Значения регистров
 						{
-							MB_HZ_I=MB_HZ_1;
+							write_buffer[4+(2*i)]=(reg_MB2[res_buffer[2]*0x100+res_buffer[3]+i-256])%256;		// Младший байт (2-ой)
+							write_buffer[3+(2*i)]=(reg_MB2[res_buffer[2]*0x100+res_buffer[3]+i-256])/256;	// Старший байт (1-ый)
 						}
 
+
+						
+						snd_cnt=write_buffer[2]+3;
+					}
+					else if ((res_buffer[2]==2) && ((res_buffer[3]+res_buffer[4]*256+res_buffer[5]-1)<15))
+					{
+						//ampl=MaxS;
+						MB04();
+
+						write_buffer[0]=res_buffer[0];					// Адрес устройства
+						write_buffer[1]=0x04;						// Та-же функция
+						write_buffer[2]=res_buffer[5]*2;			// Счетчик байт
+
+						for (i=0; i<res_buffer[5]; i++)				// Значения регистров
+						{
+							write_buffer[4+(2*i)]=(reg_MB3[res_buffer[2]*0x100+res_buffer[3]+i-512])%256;		// Младший байт (2-ой)
+							write_buffer[3+(2*i)]=(reg_MB3[res_buffer[2]*0x100+res_buffer[3]+i-512])/256;	// Старший байт (1-ый)
+						}
+						
+						snd_cnt=write_buffer[2]+3;
+
+					}
+					else
+					{
 						write_buffer[0]=res_buffer[0];					// адрес блока
-						write_buffer[1]=0x06;						// та-же функция
-						write_buffer[2]=res_buffer[2];				// те же данные
+						write_buffer[1]=0x84;						// та-же функция + взведенный бит ошибки
+						write_buffer[2]=0x02;				// код ошибки - недопустимый адрес
+						snd_cnt=3;
+						
+
+					}
+					break;
+				}
+				case 0x06:						//запись регистра
+				{
+						if ((res_buffer[2]*0x100+res_buffer[3]>0x20)&&(res_buffer[2]*0x100+res_buffer[3]<0x25))//если возможна запись регистра
+						{
+							//uint16_t ind,dt;
+							write_buffer[0]=res_buffer[0];					// адрес блока
+							write_buffer[1]=0x06;						// та-же функция
+							write_buffer[2]=res_buffer[2];				// те же данные
+							write_buffer[3]=res_buffer[3];
+							write_buffer[4]=res_buffer[4];
+							write_buffer[5]=res_buffer[5];
+							snd_cnt=6;
+							ind=res_buffer[2]*0x100+res_buffer[3];
+							dt=res_buffer[4]*0x100+res_buffer[5];					
+							if(ind==0x22)
+							{
+								if(dt>8){dt=8;}
+								NeedChangeSpeed=1;
+								//USART2_ReInit(dt);
+								//MX_TIM2_Init(dt);
+							}
+							reg_MB[ind]=dt;	
+							needFlashWrite=1;
+							//Write_Flash();
+						}
+						//zero
+						else if(res_buffer[0]==247&&((res_buffer[2]*0x100+res_buffer[3]>7)&&(res_buffer[2]*0x100+res_buffer[3]<0x0E)))
+						{	
+							MB_AMPL_ZERO=MB_AMPL_NOW&0x0FFF;
+							MB_RMS_ZERO=MB_RMS_NOW&0x0FFF;
+							MB_AMPL_ZERO2=MB_AMPL_NOW2&0x0FFF;
+							MB_RMS_ZERO2=MB_RMS_NOW2&0x0FFF;
+							MB_AMPL_ZERO3=MB_AMPL_NOW3&0x0FFF;
+							MB_RMS_ZERO3=MB_RMS_NOW3&0x0FFF;
+							
+
+							write_buffer[0]=res_buffer[0];					// адрес блока
+							write_buffer[1]=0x06;						// та-же функция
+							write_buffer[2]=res_buffer[2];				// те же данные
+							write_buffer[3]=res_buffer[3];
+							write_buffer[4]=res_buffer[4];
+							write_buffer[5]=res_buffer[5];
+							snd_cnt=6;
+						
+							needFlashWrite=1;
+							//Write_Flash();
+						}
+						
+						else if(res_buffer[0]==247&&((res_buffer[2]*0x100+res_buffer[3]>0x2F)&&(res_buffer[2]*0x100+res_buffer[3]<0x4D)))
+						{
+							MB04();
+							
+							
+
+							reg_MB[res_buffer[3]]=res_buffer[4]*0x100+res_buffer[5];
+
+
+							if(res_buffer[3]==0x4C)
+							{
+								MB_HZ_I=MB_HZ_1;
+							}
+
+							write_buffer[0]=res_buffer[0];					// адрес блока
+							write_buffer[1]=0x06;						// та-же функция
+							write_buffer[2]=res_buffer[2];				// те же данные
+							write_buffer[3]=res_buffer[3];
+							write_buffer[4]=res_buffer[4];
+							write_buffer[5]=res_buffer[5];
+							snd_cnt=6;
+						
+							needFlashWrite=1;
+							//Write_Flash();
+						}
+						
+						else if(res_buffer[0]==247&&res_buffer[2]==0x00&&res_buffer[3]==0x50&&res_buffer[4]==0x50&&res_buffer[5]==0x50)
+						{
+							write_buffer[0]=res_buffer[0];					// адрес блока
+							write_buffer[1]=0x06;						// та-же функция
+							write_buffer[2]=res_buffer[2];				// те же данные
+							write_buffer[3]=res_buffer[3];
+							write_buffer[4]=res_buffer[4];
+							write_buffer[5]=res_buffer[5];
+							snd_cnt=6;
+
+							
+							FORCE_ATT = 0x01;
+						}
+						
+						else if(res_buffer[0]==247&&res_buffer[2]==0x00&&res_buffer[3]==0x50&&res_buffer[4]==0xA0&&res_buffer[5]==0xA0)
+						{
+							write_buffer[0]=res_buffer[0];					// адрес блока
+							write_buffer[1]=0x06;						// та-же функция
+							write_buffer[2]=res_buffer[2];				// те же данные
+							write_buffer[3]=res_buffer[3];
+							write_buffer[4]=res_buffer[4];
+							write_buffer[5]=res_buffer[5];
+							snd_cnt=6;
+
+							
+							FORCE_ATT = 0x00;
+						}			
+						else if(res_buffer[0]==247&&res_buffer[2]==0x55&&res_buffer[3]==0x55&&res_buffer[4]==0x55&&res_buffer[5]==0x55)
+						{
+							write_buffer[0]=res_buffer[0];					// адрес блока
+							write_buffer[1]=0x06;						// та-же функция
+							write_buffer[2]=res_buffer[2];				// те же данные
+							write_buffer[3]=res_buffer[3];
+							write_buffer[4]=res_buffer[4];
+							write_buffer[5]=res_buffer[5];
+							snd_cnt=6;	
+							bl_flag = 1;
+						}	
+						else if(res_buffer[0]==247&&res_buffer[2]==0xFF&&res_buffer[3]==0xFF&&res_buffer[4]==0xFF&&res_buffer[5]==0xFF)
+						{
+							write_buffer[0]=res_buffer[0];					// адрес блока
+							write_buffer[1]=0x06;						// та-же функция
+							write_buffer[2]=res_buffer[2];				// те же данные
+							write_buffer[3]=res_buffer[3];
+							write_buffer[4]=res_buffer[4];
+							write_buffer[5]=res_buffer[5];
+							snd_cnt=6;						
+							Erase_Flash();
+						}	
+						
+						else
+						{
+							write_buffer[0]=res_buffer[0];					// адрес устройства
+							write_buffer[1]=0x86;						// та-же функция
+							write_buffer[2]=0x02;				// код ошибки - недопустимый адрес
+							snd_cnt=3;
+
+
+
+						}
+
+						break;
+				}
+				case 0x10:
+				{
+					if(res_buffer[0]==247&&res_buffer[2]==0&&
+						(res_buffer[3]==0x40||res_buffer[3]==0x42||res_buffer[3]==0x44||res_buffer[3]==0x46||res_buffer[3]==0x48||res_buffer[3]==0x4A)
+						&&res_buffer[4]==0&&res_buffer[5]==2
+						&&res_buffer[6]==4)
+					{
+						write_buffer[0]=res_buffer[0];					// Адрес устройства
+						write_buffer[1]=res_buffer[1];						// Та-же функция
+						write_buffer[2]=res_buffer[2];		
 						write_buffer[3]=res_buffer[3];
 						write_buffer[4]=res_buffer[4];
 						write_buffer[5]=res_buffer[5];
+						if(res_buffer[3]==0x40)
+						{
+							MB_AMPL_N_I=(MB_AMPL_NOW&0x0FFF)-MB_AMPL_ZERO;
+							MB_RMS_N_I=(MB_RMS_NOW&0x0FFF)-MB_RMS_ZERO;
+						}
+						else if(res_buffer[3]==0x44)
+						{
+							MB_AMPL_N_I2=(MB_AMPL_NOW2&0x0FFF)-MB_AMPL_ZERO2;
+							MB_RMS_N_I2=(MB_RMS_NOW2&0x0FFF)-MB_RMS_ZERO2;
+						}
+						else if(res_buffer[3]==0x48)
+						{
+							MB_AMPL_N_I3=(MB_AMPL_NOW3&0x0FFF)-MB_AMPL_ZERO3;
+							MB_RMS_N_I3=(MB_RMS_NOW3&0x0FFF)-MB_RMS_ZERO3;
+						}
+						else if(res_buffer[3]==0x42)
+						{
+							MB_AMPL_O_I=(MB_AMPL_NOW&0x0FFF)-MB_AMPL_ZERO;
+							MB_RMS_O_I=(MB_RMS_NOW&0x0FFF)-MB_RMS_ZERO;
+						}
+						else if(res_buffer[3]==0x46)
+						{
+							MB_AMPL_O_I2=(MB_AMPL_NOW2&0x0FFF)-MB_AMPL_ZERO2;
+							MB_RMS_O_I2=(MB_RMS_NOW2&0x0FFF)-MB_RMS_ZERO2;
+						}
+						else if(res_buffer[3]==0x4A)
+						{
+							MB_AMPL_O_I3=(MB_AMPL_NOW3&0x0FFF)-MB_AMPL_ZERO3;
+							MB_RMS_O_I3=(MB_RMS_NOW3&0x0FFF)-MB_RMS_ZERO3;
+						}
+						//reg_MB[res_buffer[3]+9]=(MB_RMS_NOW&0x0FFF)-MB_RMS_ZERO;
+						//reg_MB[res_buffer[3]+8]=(MB_AMPL_NOW&0x0FFF)-MB_AMPL_ZERO;
+						reg_MB[res_buffer[3]]=res_buffer[7]*0x100+res_buffer[8];
+						reg_MB[res_buffer[3]+1]=res_buffer[9]*0x100+res_buffer[10];
 						snd_cnt=6;
-					
 						needFlashWrite=1;
-						//Write_Flash();
+							//Write_Flash();
 					}
-					
-					else if(res_buffer[0]==247&&res_buffer[2]==0x00&&res_buffer[3]==0x50&&res_buffer[4]==0x50&&res_buffer[5]==0x50)
+					else
 					{
-						write_buffer[0]=res_buffer[0];					// адрес блока
-						write_buffer[1]=0x06;						// та-же функция
-						write_buffer[2]=res_buffer[2];				// те же данные
-						write_buffer[3]=res_buffer[3];
-						write_buffer[4]=res_buffer[4];
-						write_buffer[5]=res_buffer[5];
-						snd_cnt=6;
-
-						
-						FORCE_ATT = 0x01;
-					}
-					
-					else if(res_buffer[0]==247&&res_buffer[2]==0x00&&res_buffer[3]==0x50&&res_buffer[4]==0xA0&&res_buffer[5]==0xA0)
-					{
-						write_buffer[0]=res_buffer[0];					// адрес блока
-						write_buffer[1]=0x06;						// та-же функция
-						write_buffer[2]=res_buffer[2];				// те же данные
-						write_buffer[3]=res_buffer[3];
-						write_buffer[4]=res_buffer[4];
-						write_buffer[5]=res_buffer[5];
-						snd_cnt=6;
-
-						
-						FORCE_ATT = 0x00;
-					}			
-					else if(res_buffer[0]==247&&res_buffer[2]==0x55&&res_buffer[3]==0x55&&res_buffer[4]==0x55&&res_buffer[5]==0x55)
-					{
-						write_buffer[0]=res_buffer[0];					// адрес блока
-						write_buffer[1]=0x06;						// та-же функция
-						write_buffer[2]=res_buffer[2];				// те же данные
-						write_buffer[3]=res_buffer[3];
-						write_buffer[4]=res_buffer[4];
-						write_buffer[5]=res_buffer[5];
-						snd_cnt=6;	
-						bl_flag = 1;
-					}	
-					else if(res_buffer[0]==247&&res_buffer[2]==0xFF&&res_buffer[3]==0xFF&&res_buffer[4]==0xFF&&res_buffer[5]==0xFF)
-					{
-						write_buffer[0]=res_buffer[0];					// адрес блока
-						write_buffer[1]=0x06;						// та-же функция
-						write_buffer[2]=res_buffer[2];				// те же данные
-						write_buffer[3]=res_buffer[3];
-						write_buffer[4]=res_buffer[4];
-						write_buffer[5]=res_buffer[5];
-						snd_cnt=6;						
-						Erase_Flash();
-					}	
-					
-		  		else
-		  		{
-		  			write_buffer[0]=res_buffer[0];					// адрес устройства
-		  			write_buffer[1]=0x86;						// та-же функция
-		  			write_buffer[2]=0x02;				// код ошибки - недопустимый адрес
+						write_buffer[0]=res_buffer[0];					// адрес устройства
+						write_buffer[1]=0x90;						// та-же функция
+						write_buffer[2]=0x02;				// код ошибки - недопустимый адрес
 						snd_cnt=3;
 
-
-
-		  		}
-
-		  		break;
-		  }
-			case 0x10:
-			{
-				if(res_buffer[0]==247&&res_buffer[2]==0&&
-					(res_buffer[3]==0x40||res_buffer[3]==0x42||res_buffer[3]==0x44||res_buffer[3]==0x46||res_buffer[3]==0x48||res_buffer[3]==0x4A)
-					&&res_buffer[4]==0&&res_buffer[5]==2
-					&&res_buffer[6]==4)
-				{
-					write_buffer[0]=res_buffer[0];					// Адрес устройства
-					write_buffer[1]=res_buffer[1];						// Та-же функция
-					write_buffer[2]=res_buffer[2];		
-					write_buffer[3]=res_buffer[3];
-					write_buffer[4]=res_buffer[4];
-					write_buffer[5]=res_buffer[5];
-					if(res_buffer[3]==0x40)
-					{
-						MB_AMPL_N_I=(MB_AMPL_NOW&0x0FFF)-MB_AMPL_ZERO;
-						MB_RMS_N_I=(MB_RMS_NOW&0x0FFF)-MB_RMS_ZERO;
-					}
-					else if(res_buffer[3]==0x44)
-					{
-						MB_AMPL_N_I2=(MB_AMPL_NOW2&0x0FFF)-MB_AMPL_ZERO2;
-						MB_RMS_N_I2=(MB_RMS_NOW2&0x0FFF)-MB_RMS_ZERO2;
-					}
-					else if(res_buffer[3]==0x48)
-					{
-						MB_AMPL_N_I3=(MB_AMPL_NOW3&0x0FFF)-MB_AMPL_ZERO3;
-						MB_RMS_N_I3=(MB_RMS_NOW3&0x0FFF)-MB_RMS_ZERO3;
-					}
-					else if(res_buffer[3]==0x42)
-					{
-						MB_AMPL_O_I=(MB_AMPL_NOW&0x0FFF)-MB_AMPL_ZERO;
-						MB_RMS_O_I=(MB_RMS_NOW&0x0FFF)-MB_RMS_ZERO;
-					}
-					else if(res_buffer[3]==0x46)
-					{
-						MB_AMPL_O_I2=(MB_AMPL_NOW2&0x0FFF)-MB_AMPL_ZERO2;
-						MB_RMS_O_I2=(MB_RMS_NOW2&0x0FFF)-MB_RMS_ZERO2;
-					}
-					else if(res_buffer[3]==0x4A)
-					{
-						MB_AMPL_O_I3=(MB_AMPL_NOW3&0x0FFF)-MB_AMPL_ZERO3;
-						MB_RMS_O_I3=(MB_RMS_NOW3&0x0FFF)-MB_RMS_ZERO3;
-					}
-					//reg_MB[res_buffer[3]+9]=(MB_RMS_NOW&0x0FFF)-MB_RMS_ZERO;
-					//reg_MB[res_buffer[3]+8]=(MB_AMPL_NOW&0x0FFF)-MB_AMPL_ZERO;
-					reg_MB[res_buffer[3]]=res_buffer[7]*0x100+res_buffer[8];
-					reg_MB[res_buffer[3]+1]=res_buffer[9]*0x100+res_buffer[10];
-					snd_cnt=6;
-					needFlashWrite=1;
-						//Write_Flash();
+					}	
+					break;
 				}
-				else
+
+				case 0x45:
 				{
-					write_buffer[0]=res_buffer[0];					// адрес устройства
-					write_buffer[1]=0x90;						// та-же функция
-					write_buffer[2]=0x02;				// код ошибки - недопустимый адрес
+					
+					write_buffer[0]=res_buffer[0];					// адрес блока
+					write_buffer[1]=res_buffer[1];						// та-же функция 
+					write_buffer[2]=res_buffer[2];						// та-же функция 
 					snd_cnt=3;
 
-				}	
-				break;
-			}
-
-			case 0x45:
-			{
-				
-				write_buffer[0]=res_buffer[0];					// адрес блока
-				write_buffer[1]=res_buffer[1];						// та-же функция 
-				write_buffer[2]=res_buffer[2];						// та-же функция 
-				snd_cnt=3;
-
-				if(res_buffer[0]==247)
-				{
-					FORCE_ATT = res_buffer[2];
+					if(res_buffer[0]==247)
+					{
+						FORCE_ATT = res_buffer[2];
+					}
+					
+					//HAL_UART_Transmit(&huart2,write_buffer,5,100);
+					break;
 				}
-				
-				//HAL_UART_Transmit(&huart2,write_buffer,5,100);
-				break;
-			}
-			default:
-			{
-				write_buffer[0]=res_buffer[0];					// адрес блока
-				write_buffer[1]=res_buffer[1]+0x80;						// та-же функция + взведенный бит ошибки
-				write_buffer[2]=0x01;				// код ошибки - недопустимая функция
-				snd_cnt=3;
+				default:
+				{
+					write_buffer[0]=res_buffer[0];					// адрес блока
+					write_buffer[1]=res_buffer[1]+0x80;						// та-же функция + взведенный бит ошибки
+					write_buffer[2]=0x01;				// код ошибки - недопустимая функция
+					snd_cnt=3;
 
 
-				break;
+					break;
+				}
 			}
-	  }
+		}
+		else 
+		{
+			write_buffer[0]=res_buffer[0];					// адрес блока
+			write_buffer[1]=res_buffer[1]+0x80;						// та-же функция + взведенный бит ошибки
+			write_buffer[2]=0x06;				// код ошибки - busy
+			snd_cnt=3;
+		}
+		
 			CRCCod=CRC16(write_buffer, snd_cnt);				// расчет CRC
 
 			write_buffer[snd_cnt] = CRCCod & 0x00FF;			// мл. байт CRC
