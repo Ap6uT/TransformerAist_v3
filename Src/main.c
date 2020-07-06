@@ -545,11 +545,13 @@ void Write_Flash_Adr(uint32_t Adr)
 
 void Write_Flash(void)
 {
+	__disable_irq ();
 	MBBusy=1;
 	Write_Flash_Adr(FlAdr);
 	Write_Flash_Adr(FlAdr+0x100);
 	Write_Flash_Adr(FlAdr+0x200);
 	MBBusy=0;
+	__enable_irq();
 }
 
 uint32_t FLASH_Read(uint32_t address)
