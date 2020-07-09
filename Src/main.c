@@ -131,6 +131,7 @@ UART_HandleTypeDef huart2;
 ADC_AnalogWDGConfTypeDef awdgc1;
 
 volatile uint8_t mbReinitCnt=0;
+volatile uint8_t needFlashWrite=0;
 
 uint16_t CRCCod;
 
@@ -548,7 +549,9 @@ void Write_Flash(void)
 	__disable_irq ();
 	MBBusy=1;
 	Write_Flash_Adr(FlAdr);
+	HAL_Delay(100);
 	Write_Flash_Adr(FlAdr+0x100);
+	HAL_Delay(100);
 	Write_Flash_Adr(FlAdr+0x200);
 	MBBusy=0;
 	__enable_irq();
@@ -1065,6 +1068,11 @@ int main(void)
 			HAL_NVIC_EnableIRQ(USART2_IRQn);
 			__HAL_UART_ENABLE_IT(&huart2, UART_IT_RXNE);
 		}
+		if(needFlashWrite)
+		{
+			needFlashWrite=0;
+			Write_Flash();
+		}
 		
 		My_Jump_Boatloader();
 		
@@ -1464,7 +1472,7 @@ void TIM2_IRQHandler(void)
 
 	FlagMB=1;
 	
-	uint8_t needFlashWrite=0;
+	
 		
 	uint16_t ind,dt;
 	
@@ -1818,11 +1826,11 @@ void TIM2_IRQHandler(void)
 				MX_TIM2_Init(dt);
 			}
 			
-			if(needFlashWrite)
+			/*if(needFlashWrite)
 			{
 				needFlashWrite=0;
 				Write_Flash();
-			}
+			}*/
 	  }
 
 
