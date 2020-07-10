@@ -546,7 +546,7 @@ void Write_Flash_Adr(uint32_t Adr)
 
 void Write_Flash(void)
 {
-	__disable_irq ();
+	/*__disable_irq ();
 	MBBusy=1;
 	Write_Flash_Adr(FlAdr);
 	HAL_Delay(100);
@@ -554,7 +554,53 @@ void Write_Flash(void)
 	HAL_Delay(100);
 	Write_Flash_Adr(FlAdr+0x200);
 	MBBusy=0;
-	__enable_irq();
+	__enable_irq();*/
+	uint16_t i=0;
+	uint32_t Buf[20];
+	uint32_t PgError = 0;
+	Buf[0]=(uint32_t)(MB_ADR*0x10000+MB_SPEED);
+	Buf[1]=(uint32_t)(MB_RMS_N_I*0x10000+MB_AMPL_N_I);
+	Buf[2]=(uint32_t)(MB_RMS_O_I*0x10000+MB_AMPL_O_I);
+	Buf[3]=(uint32_t)(MB_RMS_N_I2*0x10000+MB_AMPL_N_I2);
+	Buf[4]=(uint32_t)(MB_RMS_O_I2*0x10000+MB_AMPL_O_I2);
+	Buf[5]=(uint32_t)(MB_RMS_N_I3*0x10000+MB_AMPL_N_I3);
+	Buf[6]=(uint32_t)(MB_RMS_O_I3*0x10000+MB_AMPL_O_I3);
+	Buf[7]=(uint32_t)(MB_HZ_I*0x10000+MB_HZ_F);
+	Buf[8]=(uint32_t)(MB_FLOAT1_N_F*0x10000+MB_FLOAT2_N_F);
+	Buf[9]=(uint32_t)(MB_FLOAT1_O_F*0x10000+MB_FLOAT2_O_F);
+	Buf[10]=(uint32_t)(MB_AMPL_ZERO*0x10000+MB_RMS_ZERO);
+	Buf[11]=(uint32_t)(MB_AMPL_ZERO2*0x10000+MB_RMS_ZERO2);
+	Buf[12]=(uint32_t)(MB_AMPL_ZERO3*0x10000+MB_RMS_ZERO3);
+	Buf[13]=(uint32_t)(MB_NAME);
+	Buf[14]=(uint32_t)(MB_ATT_OFF*0x10000+MB_ATT_ON);
+	Buf[15]=(uint32_t)(MB_FLOAT1_N_F2*0x10000+MB_FLOAT2_N_F2);
+	Buf[16]=(uint32_t)(MB_FLOAT1_O_F2*0x10000+MB_FLOAT2_O_F2);
+	Buf[17]=(uint32_t)(MB_FLOAT1_N_F3*0x10000+MB_FLOAT2_N_F3);
+	Buf[18]=(uint32_t)(MB_FLOAT1_O_F3*0x10000+MB_FLOAT2_O_F3);
+	Buf[19]=check_calc(Buf,19);
+	
+	HAL_FLASH_Unlock();
+	
+	FLASH_EraseInitTypeDef Flash_eraseInitStruct;
+	Flash_eraseInitStruct.TypeErase     = FLASH_TYPEERASE_PAGES;
+	Flash_eraseInitStruct.PageAddress  = FlAdr;
+	Flash_eraseInitStruct.NbPages        = 3;
+
+	if(HAL_FLASHEx_Erase(&Flash_eraseInitStruct, &PgError) != HAL_OK)
+	{
+		 HAL_FLASH_Lock();
+	}
+	for(i=0;i<20;i++)
+	{
+		HAL_FLASH_Program(TYPEPROGRAM_WORD, FlAdr+i*4,Buf[i]);
+	}	
+	{
+		HAL_FLASH_Program(TYPEPROGRAM_WORD, FlAdr+0x100+i*4,Buf[i]);
+	}	
+	{
+		HAL_FLASH_Program(TYPEPROGRAM_WORD, FlAdr+0x200+i*4,Buf[i]);
+	}	
+	HAL_FLASH_Lock();
 }
 
 uint32_t FLASH_Read(uint32_t address)
@@ -1068,11 +1114,11 @@ int main(void)
 			HAL_NVIC_EnableIRQ(USART2_IRQn);
 			__HAL_UART_ENABLE_IT(&huart2, UART_IT_RXNE);
 		}
-		if(needFlashWrite)
+		/*if(needFlashWrite)
 		{
 			needFlashWrite=0;
 			Write_Flash();
-		}
+		}*/
 		
 		My_Jump_Boatloader();
 		
@@ -1826,11 +1872,11 @@ void TIM2_IRQHandler(void)
 				MX_TIM2_Init(dt);
 			}
 			
-			/*if(needFlashWrite)
+			if(needFlashWrite)
 			{
 				needFlashWrite=0;
 				Write_Flash();
-			}*/
+			}
 	  }
 
 
