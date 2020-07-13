@@ -584,7 +584,7 @@ void Write_Flash(void)
 	FLASH_EraseInitTypeDef Flash_eraseInitStruct;
 	Flash_eraseInitStruct.TypeErase     = FLASH_TYPEERASE_PAGES;
 	Flash_eraseInitStruct.PageAddress  = FlAdr;
-	Flash_eraseInitStruct.NbPages        = 3;
+	Flash_eraseInitStruct.NbPages        = 1;
 
 	if(HAL_FLASHEx_Erase(&Flash_eraseInitStruct, &PgError) != HAL_OK)
 	{
@@ -594,9 +594,27 @@ void Write_Flash(void)
 	{
 		HAL_FLASH_Program(TYPEPROGRAM_WORD, FlAdr+i*4,Buf[i]);
 	}	
+	Flash_eraseInitStruct.TypeErase     = FLASH_TYPEERASE_PAGES;
+	Flash_eraseInitStruct.PageAddress  = FlAdr+0x100;
+	Flash_eraseInitStruct.NbPages        = 1;
+
+	if(HAL_FLASHEx_Erase(&Flash_eraseInitStruct, &PgError) != HAL_OK)
+	{
+		 HAL_FLASH_Lock();
+	}
+	for(i=0;i<20;i++)
 	{
 		HAL_FLASH_Program(TYPEPROGRAM_WORD, FlAdr+0x100+i*4,Buf[i]);
 	}	
+	Flash_eraseInitStruct.TypeErase     = FLASH_TYPEERASE_PAGES;
+	Flash_eraseInitStruct.PageAddress  = FlAdr+0x200;
+	Flash_eraseInitStruct.NbPages        = 1;
+
+	if(HAL_FLASHEx_Erase(&Flash_eraseInitStruct, &PgError) != HAL_OK)
+	{
+		 HAL_FLASH_Lock();
+	}
+	for(i=0;i<20;i++)
 	{
 		HAL_FLASH_Program(TYPEPROGRAM_WORD, FlAdr+0x200+i*4,Buf[i]);
 	}	
@@ -981,9 +999,11 @@ int main(void)
 	MB_ATT_OFF=0x00FA;
 	uint8_t j;
 	FBI[0][0]=FLASH_Read(FlAdr);
+	FBI[1][0]=FLASH_Read(FlAdr+ 0x100);
+	FBI[2][0]=FLASH_Read(FlAdr+ 0x200);
 	uint8_t k, rightData;
 	
-	if((FBI[0][0]==0)||(FBI[0][0]==0xFFFFFFFF))
+	if(((FBI[0][0]==0)||(FBI[0][0]==0xFFFFFFFF))&&((FBI[1][0]==0)||(FBI[1][0]==0xFFFFFFFF))&&((FBI[2][0]==0)||(FBI[2][0]==0xFFFFFFFF)))
 	{
 		rightData=4; //wrong data - need write default
 		Write_Flash();
@@ -1010,6 +1030,10 @@ int main(void)
 			rightData=0;
 		}
 		else if (crc32[1]==FBI[1][19] && crc32[2]==FBI[2][19] && FBI[1][19]==FBI[2][19])
+		{
+			rightData=1;
+		}
+		else if (crc32[1]==FBI[1][19])
 		{
 			rightData=1;
 		}
